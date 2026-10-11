@@ -1,11 +1,14 @@
 import http from 'node:http';
 import {readFileSync,existsSync,mkdirSync,writeFileSync,renameSync} from 'node:fs';
-import {randomBytes} from 'node:crypto';
+import {randomBytes,timingSafeEqual} from 'node:crypto';
 import {createServer as createViteServer} from 'vite';
 import {JsonRpcProvider,Wallet,Contract,parseUnits,Signature,verifyTypedData,TypedDataEncoder} from 'ethers';
 import {TOKEN,CHAIN,ABI,types} from './src/payment.js';
 import {planRebalance} from './src/portfolio.js';
 if(existsSync('.env')) for(const line of readFileSync('.env','utf8').split('\n')) {const m=line.match(/^([A-Z_]+)=(.*)$/);if(m&&!process.env[m[1]])process.env[m[1]]=m[2].trim();}
+const PORT=Number(process.env.PORT||5173);
+if(!Number.isInteger(PORT)||PORT<1024||PORT>65535)throw new Error('PORT must be an integer from 1024 to 65535.');
+const proposalToken=process.env.PROPOSAL_API_TOKEN||'';
 const rpc=new JsonRpcProvider(process.env.BASE_SEPOLIA_RPC||'https://sepolia.base.org',CHAIN,{staticNetwork:true});
 const wallet=process.env.RELAYER_PRIVATE_KEY ? new Wallet(process.env.RELAYER_PRIVATE_KEY,rpc) : null;
 const token=wallet ? new Contract(TOKEN,ABI,wallet) : null;
@@ -25,14 +28,26 @@ async function domain() {
 }
 function send(res,code,data,headers={}) {res.writeHead(code,{'Content-Type':'application/json',...headers});res.end(JSON.stringify(data));}
 async function body(req){let s='';for await(const chunk of req){s+=chunk;if(s.length>64000)throw new Error('Request too large.');}return JSON.parse(s||'{}');}
+function bearerAuthorized(req){const supplied=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'');if(!proposalToken||!supplied)return false;const expected=Buffer.from(proposalToken),actual=Buffer.from(supplied);return expected.length===actual.length&&timingSafeEqual(expected,actual);}
 const vite=await createViteServer({server:{middlewareMode:true},appType:'mpa'});
 const server=http.createServer(async(req,res)=>{
   if(!req.url.startsWith('/api/'))return vite.middlewares(req,res);
   // Local demo signer must not be exposed to cross-origin requests.
-  if(req.headers.origin && !['http://127.0.0.1:5173','http://localhost:5173'].includes(req.headers.origin))return send(res,403,{error:'Local origin required.'});
+  if(req.headers.origin && ![`http://127.0.0.1:${PORT}`,`http://localhost:${PORT}`].includes(req.headers.origin))return send(res,403,{error:'Local origin required.'});
   try {
     const path=new URL(req.url,'http://localhost:5173').pathname;
     if(path==='/api/config'&&req.method==='GET')return send(res,200,{liveReady:!!wallet,broker:wallet?.address,network:CHAIN});
+    if(path==='/api/hermes/proposals'){
+      if(req.method!=='POST')return send(res,405,{error:'POST required.'});
+      if(!proposalToken)return send(res,503,{error:'Set PROPOSAL_API_TOKEN in .env and restart the server.'});
+      if(!bearerAuthorized(req))return send(res,401,{error:'Bearer authentication required.'},{'WWW-Authenticate':'Bearer'});
+      const input=await body(req),maximumSpending=Number(input.maximumSpending),driftThreshold=Number(input.driftThreshold);
+      if(!Number.isFinite(maximumSpending)||maximumSpending<0)throw new Error('maximumSpending must be a nonnegative AUSD amount.');
+      const plan=planRebalance(input.holdings,input.targetAllocations,driftThreshold),withinMaximumSpending=plan.buy<=maximumSpending;
+      const proposedTrades=plan.trades.map(trade=>{const allocation=plan.allocations.find(row=>row.category===trade.category);return {side:trade.amount>0?'buy':'sell',category:trade.category,amountAusd:Math.abs(trade.amount),reason:`Move ${trade.category} from ${allocation.current.toFixed(1)}% toward its ${allocation.target.toFixed(1)}% target.`};});
+      const reasoning=[`Observed ${input.holdings.length} holdings worth ${plan.total.toFixed(2)} AUSD.`,`Largest allocation drift is ${plan.drift.toFixed(2)} percentage points versus a ${driftThreshold.toFixed(2)} point trigger.`,plan.trades.length?'A rebalance is proposed to move non-cash categories toward target weights.':'No trades are proposed because the portfolio is within the drift threshold.',withinMaximumSpending?`Gross buys of ${plan.buy.toFixed(2)} AUSD fit the ${maximumSpending.toFixed(2)} AUSD spending limit.`:`Gross buys of ${plan.buy.toFixed(2)} AUSD exceed the ${maximumSpending.toFixed(2)} AUSD spending limit, so the proposal is blocked.`];
+      return send(res,200,{proposalId:randomBytes(12).toString('hex'),agent:'hermes-portfolio-planner',mode:'proposal_only',executable:plan.trades.length>0&&withinMaximumSpending,portfolioValueAusd:plan.total,largestDriftPercentagePoints:plan.drift,maximumSpendingAusd:maximumSpending,grossBuyAusd:plan.buy,grossSellAusd:plan.sell,proposedTrades,reasoning,paymentsExecuted:false});
+    }
     if(req.method!=='POST')return send(res,405,{error:'POST required.'});
     const input=await body(req);
     if(path==='/api/cancel') {
@@ -49,7 +64,7 @@ const server=http.createServer(async(req,res)=>{
       const amount=kind==='data'?'0.10':(plan.buy+0.05).toFixed(2);
       const d=await domain(),nonce='0x'+randomBytes(32).toString('hex'),id=randomBytes(16).toString('hex');
       const accepted={scheme:'exact',network:'eip155:84532',amount:parseUnits(amount,6).toString(),asset:TOKEN,payTo:wallet.address,maxTimeoutSeconds:300,extra:{name:d.name,version:d.version,assetTransferMethod:'eip3009'}};
-      const required={x402Version:2,resource:{url:`http://localhost:5173/api/paid/${id}`,description:kind==='data'?'Demo market snapshot':'Simulated rebalance settlement',mimeType:'application/json'},accepts:[accepted]};
+      const required={x402Version:2,resource:{url:`http://localhost:${PORT}/api/paid/${id}`,description:kind==='data'?'Demo market snapshot':'Simulated rebalance settlement',mimeType:'application/json'},accepts:[accepted]};
       for(const [key,q] of quotes)if(q.expires<Date.now()&&!q.promise&&!q.tx)quotes.delete(key);
       if(quotes.size>200)throw new Error('Too many active quotes. Try later.');
       quotes.set(id,{required,plan,kind,nonce,domain:d,expires:Date.now()+300000});save();
@@ -86,4 +101,4 @@ const server=http.createServer(async(req,res)=>{
     send(res,404,{error:'Not found.'});
   }catch(e){send(res,400,{error:e.shortMessage||e.message});}
 });
-server.listen(5173,'127.0.0.1',()=>console.log('Portfolio Agent: http://127.0.0.1:5173'));
+server.listen(PORT,'127.0.0.1',()=>console.log(`Portfolio Agent: http://127.0.0.1:${PORT}`));

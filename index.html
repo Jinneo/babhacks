@@ -1,1 +1,62 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Agora · Portfolio Agent</title></head><body><div class="shell"><nav><a class="logo" href="/">◈ agora <span>PORTFOLIO AGENT</span></a><div><a href="/transfer.html">Transfer lab ↗</a><span class="network">● Base Sepolia</span><button id="connect">Connect wallet ↗</button></div></nav><main><div class="headline"><div><p class="eyebrow">YOUR PORTFOLIO, IN BALANCE</p><h1>Give your portfolio<br>a little direction.</h1><p class="subtitle">Set the targets. Let your agent work out the moves.</p></div><div class="mode-box"><label for="mode">Settlement mode</label><select id="mode"><option value="demo">Simulation · no wallet needed</option><option value="live">Base Sepolia · real test AUSD</option></select><p id="wallet-status">Demo ready. No bank connection required.</p></div></div><div class="stats"><article><small>Portfolio value</small><strong id="total">—</strong><span>Imported / simulated holdings</span></article><article><small>Largest allocation drift</small><strong id="drift">—</strong><span>From your target allocation</span></article><article><small>Wallet AUSD</small><strong id="wallet-balance">—</strong><span id="broker-status">Checking local broker…</span></article></div><div class="grid"><section class="panel portfolio"><div class="section-head"><h2>Your holdings</h2><div><button id="sample">Load sample</button><button id="import">Import CSV ↗</button><input id="file" type="file" accept=".csv,text/csv" hidden></div></div><p class="hint">Prices come from your import. Demo instruments represent asset categories.</p><div class="allocation-bar" id="allocation-bar"></div><div class="legend" id="legend"></div><div class="table-wrap"><table><thead><tr><th>Asset</th><th>Category</th><th>Quantity</th><th>Price</th><th>Value</th></tr></thead><tbody id="holdings"></tbody></table></div><a class="download" href="/sample-portfolio.csv" download>Download CSV template ↓</a></section><section class="panel"><div class="section-head"><h2>Agent mandate</h2><span class="tag">RULE-BASED</span></div><p class="hint">Your allocation policy drives every proposed trade.</p><div id="targets"></div><div class="policy-row"><label for="threshold">Rebalance above drift</label><div><input id="threshold" type="number" min="0" max="100" step="0.1" value="2"><span>%</span></div></div><div class="policy-row"><label for="budget">Maximum buy spend</label><div><input id="budget" type="number" min="0" step="0.01" value="5000"><span>AUSD</span></div></div><p id="target-sum" class="hint"></p><button id="analyze" class="primary">Run portfolio agent →</button><p class="footnote">Planning is deterministic. All executions need your approval.</p></section></div><div class="grid lower"><section class="panel"><div class="section-head"><h2>Rebalance proposal</h2><span id="plan-badge" class="tag">AWAITING ANALYSIS</span></div><div id="proposal" class="empty">Set your targets, then run the agent.<br><span>It will explain the drift and propose the moves.</span></div><div id="actions" hidden><div class="costs" id="costs"></div><button id="execute" class="primary">Approve & execute rebalance →</button></div></section><section class="panel"><div class="section-head"><h2>Agent activity</h2><button id="clear">Clear</button></div><div id="feed" class="feed" role="log" aria-live="polite"></div></section></div><section class="panel how"><div><span class="step">01</span><h3>Observe</h3><p>Read your holdings and imported prices.</p></div><div><span class="step">02</span><h3>Plan</h3><p>Calculate drift against your allocation mandate.</p></div><div><span class="step">03</span><h3>Settle with AUSD</h3><p>Pay via x402; settle buys and receive sell refunds.</p></div></section><button id="cancel-pending" hidden>Cancel unsubmitted quote</button><p id="status" role="status" aria-live="polite">Ready to run.</p><footer><span>AUSD × x402 · Local portfolio lab</span><span>Simulated assets · Testnet tokens only · No actual securities trades</span></footer></main></div><script type="module" src="/src/agent.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Agora · AUSD Rebalancer</title>
+  <style>
+    .faucet-bar{display:flex;align-items:center;justify-content:space-between;gap:18px;border:1px solid #dce3d4;background:#eaf0e1;border-radius:13px;padding:14px 18px;margin:-6px 0 22px}.faucet-bar>div:first-child{display:flex;flex-direction:column;gap:3px}.faucet-bar strong{font-size:12px}.faucet-bar span{font-size:11px;color:#687760}.faucet-actions{display:flex;gap:8px;white-space:nowrap}@media(max-width:760px){.faucet-bar{align-items:flex-start;flex-direction:column}.faucet-actions{width:100%;white-space:normal}.faucet-actions button{flex:1}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <nav>
+      <a class="logo" href="/">◈ agora <span>AUSD REBALANCER</span></a>
+      <div><a href="/transfer.html">Transfer playground ↗</a><span class="network">● Ethereum Sepolia</span><button id="connect">Connect wallet ↗</button></div>
+    </nav>
+    <main>
+      <section class="headline">
+        <div><p class="eyebrow">REAL WALLET · REAL TESTNET TRANSACTIONS</p><h1>Rebalance your AUSD<br>without a hidden simulation.</h1><p class="subtitle">Plans use allowlisted wallet balances. Swaps require a live quote and wallet confirmation.</p></div>
+        <aside class="route-card"><strong id="route-state">Checking execution route…</strong><p id="route-detail">Only the allowlisted Ethereum Sepolia AUSD/CTK pair can enable the Rebalance button.</p></aside>
+      </section>
+
+      <section class="stats" aria-label="Wallet balances">
+        <article><small>Wallet AUSD</small><strong id="ausd-balance">—</strong><span>On-chain ERC-20 balance</span></article>
+        <article><small>Allowlisted asset</small><strong id="asset-balance">—</strong><span id="asset-symbol">No route configured</span></article>
+        <article><small>Largest drift</small><strong id="drift">—</strong><span>Compared with your target</span></article>
+      </section>
+
+      <section class="faucet-bar" aria-label="Test token faucets">
+        <div><strong>Empty test wallet?</strong><span>Request Agora test tokens directly. You still need a little Sepolia ETH for gas.</span></div>
+        <div class="faucet-actions"><button id="faucet-ausd">Get test AUSD</button><button id="faucet-ctk">Get test CTK</button></div>
+      </section>
+
+      <section class="grid">
+        <section class="panel">
+          <div class="section-head"><div><p class="eyebrow">PROTECTED MANDATE</p><h2>Rebalancing controls</h2></div><button id="refresh">Refresh balances</button></div>
+          <p class="hint">AUSD and one route-configured asset are the only allowed execution assets. Imported portfolio data is not used for execution.</p>
+          <div class="controls">
+            <label>AUSD target <span><input id="target" type="number" min="0" max="100" step="0.1" value="20">%</span></label>
+            <label>Drift threshold <span><input id="threshold" type="number" min="0" max="100" step="0.1" value="2"> pp</span></label>
+            <label>Protected AUSD reserve <span><input id="reserve" type="number" min="0" step="0.01" value="100"> AUSD</span></label>
+            <label>Per-run AUSD cap <span><input id="cap" type="number" min="0.01" step="0.01" value="500"> AUSD</span></label>
+            <label>Maximum slippage <span><input id="slippage" type="number" min="0" max="10" step="0.01" value="1">%</span></label>
+          </div>
+          <p class="security-note">Quotes expire after 60 seconds. Rebalance never sends a transaction until the connected wallet confirms it. The first swap may request testnet allowlisting and an exact token approval.</p>
+        </section>
+
+        <section class="panel proposal-panel">
+          <div class="section-head"><div><p class="eyebrow">EXECUTION PLAN</p><h2>On-chain rebalancing</h2></div><span id="plan-badge">AWAITING BALANCES</span></div>
+          <div id="proposal"><p class="hint">Connect an Ethereum Sepolia wallet, then refresh real balances to build a plan.</p></div>
+          <div class="actions"><button id="plan" class="secondary">Build plan</button><button id="execute" class="primary" disabled>Rebalance</button></div>
+          <p id="status" role="status">No transaction has been requested.</p>
+        </section>
+      </section>
+
+      <section class="panel activity-panel"><div class="section-head"><h2>Transaction activity</h2><button id="clear">Clear</button></div><div id="activity"><p class="hint">Confirmed wallet transactions will appear here with Ethereum Sepolia links.</p></div></section>
+      <p class="footer-note">Canonical Ethereum Sepolia test pair: AUSD <code>0xa901…22dC</code> / CTK <code>0x7BEb…cd9D</code>. You also need Sepolia ETH for gas. <a href="https://docs.agora.finance/instant-settlement/guides/getting-testnet-tokens" target="_blank" rel="noreferrer">Agora test-token guide ↗</a></p>
+    </main>
+  </div>
+  <script type="module" src="/src/agent.js"></script>
+</body>
+</html>
