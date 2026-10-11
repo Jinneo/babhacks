@@ -1,3 +1,5 @@
+https://x.com/BagBalancer
+
 # AUSD Ethereum Sepolia Rebalancer
 
 A local wallet-first MVP for planning and executing a protected AUSD/CTK rebalance through Agora's canonical Instant Settlement pair on Ethereum Sepolia. It never manufactures a success state: balances are read from the connected wallet, and a completed rebalance is shown only after an on-chain receipt has `status === 1`.
