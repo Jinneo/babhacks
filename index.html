@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Agora · AUSD Rebalancer</title>
+  <title>BagBalencer · Build a smarter crypto bag</title>
   <style>
     .faucet-bar{display:flex;align-items:center;justify-content:space-between;gap:18px;border:1px solid #dce3d4;background:#eaf0e1;border-radius:13px;padding:14px 18px;margin:-6px 0 22px}.faucet-bar>div:first-child{display:flex;flex-direction:column;gap:3px}.faucet-bar strong{font-size:12px}.faucet-bar span{font-size:11px;color:#687760}.faucet-actions{display:flex;gap:8px;white-space:nowrap}@media(max-width:760px){.faucet-bar{align-items:flex-start;flex-direction:column}.faucet-actions{width:100%;white-space:normal}.faucet-actions button{flex:1}}
   </style>
@@ -11,30 +11,53 @@
 <body>
   <div class="shell">
     <nav>
-      <a class="logo" href="/">◈ agora <span>AUSD REBALANCER</span></a>
-      <div><a href="/transfer.html">Transfer playground ↗</a><span class="network">● Ethereum Sepolia</span><button id="connect">Connect wallet ↗</button></div>
+      <a class="logo" href="/"><span class="bag-mark">B</span> BagBalencer <span>POWERED BY AUSD</span></a>
+      <div><a href="/transfer.html">Send AUSD ↗</a><span class="network">● Sepolia demo</span><button id="connect">Connect wallet ↗</button></div>
     </nav>
     <main>
       <section class="headline">
-        <div><p class="eyebrow">REAL WALLET · REAL TESTNET TRANSACTIONS</p><h1>Rebalance your AUSD<br>without a hidden simulation.</h1><p class="subtitle">Plans use allowlisted wallet balances. Swaps require a live quote and wallet confirmation.</p></div>
-        <aside class="route-card"><strong id="route-state">Checking execution route…</strong><p id="route-detail">Only the allowlisted Ethereum Sepolia AUSD/CTK pair can enable the Rebalance button.</p></aside>
+        <div><p class="eyebrow">BUILD SMARTER · MOVE SAFER</p><h1>Keep your bag<br><span>in balance.</span></h1><p class="subtitle">Tell BagBalencer what you want. Get a clear coin mix, stress-test it, and approve every real move yourself.</p></div>
+        <aside class="route-card"><strong id="route-state">Checking the route…</strong><p id="route-detail">The demo only unlocks trades through the verified Ethereum Sepolia AUSD/CTK pair.</p></aside>
+      </section>
+
+      <section class="panel advisor-panel">
+        <div class="section-head"><div><p class="eyebrow">BUILD YOUR BAG</p><h2>What are we working with?</h2></div><span class="proposal-only">IDEAS ONLY</span></div>
+        <p class="hint">Pick your vibe and your coins. BagBalencer makes a guarded allocation, explains the mix, and shows how it could behave in different markets.</p>
+        <div class="advisor-layout">
+          <form id="advisor-form" class="advisor-form">
+            <label>Primary goal<select id="advisor-goal"><option value="preserve">Preserve value</option><option value="income">Steady and defensive</option><option value="balanced" selected>Balanced growth</option><option value="growth">Long-term growth</option><option value="aggressive">Aggressive growth</option></select></label>
+            <label>Time horizon<select id="advisor-horizon"><option value="3">Under 1 year</option><option value="12">1–3 years</option><option value="36" selected>3–5 years</option><option value="60">5+ years</option></select></label>
+            <label>Comfortable drawdown<select id="advisor-drawdown"><option value="5">About 5%</option><option value="15" selected>About 15%</option><option value="30">About 30%</option><option value="50">50% or more</option></select></label>
+            <label>Priority<select id="advisor-priority"><option value="low_volatility">Lower volatility</option><option value="diversification" selected>Diversification</option><option value="upside">Potential upside</option></select></label>
+            <label>Market assumption<select id="advisor-regime"><option value="normal" selected>Normal conditions</option><option value="volatile">High volatility</option><option value="risk_off">Risk-off / stressed</option></select></label>
+            <label>Review cadence<select id="advisor-frequency"><option value="weekly">Weekly</option><option value="monthly" selected>Monthly</option><option value="quarterly">Quarterly</option></select></label>
+            <label>Minimum AUSD reserve<span><input id="advisor-reserve" type="number" min="0" max="95" value="20">%</span></label>
+            <label>Maximum per coin<span><input id="advisor-max-weight" type="number" min="5" max="80" value="35">%</span></label>
+            <label>Speculative cap<span><input id="advisor-speculative-limit" type="number" min="0" max="60" value="10">%</span></label>
+            <label>Maximum per rebalance<span><input id="advisor-max-spend" type="number" min="0" value="500"> AUSD</span></label>
+            <fieldset class="coin-fieldset"><legend>Allowed coin library · 50 profiles</legend><label class="coin-search">Find a coin <input id="advisor-coin-search" type="search" placeholder="Symbol or name"></label><div id="advisor-coins" class="coin-library"></div></fieldset>
+            <div class="policy-checks"><label><input id="advisor-speculative" type="checkbox"> Allow speculative assets</label><label><input id="advisor-approval" type="checkbox" checked> Require approval for every trade</label></div>
+            <button id="generate-strategy" class="primary" type="submit">Balance my bag →</button>
+          </form>
+          <div id="advisor-output" class="advisor-output"><p class="empty-state">Your bag mix will show up here.<br><span>No trades. No surprises.</span></p></div>
+        </div>
       </section>
 
       <section class="stats" aria-label="Wallet balances">
-        <article><small>Wallet AUSD</small><strong id="ausd-balance">—</strong><span>On-chain ERC-20 balance</span></article>
-        <article><small>Allowlisted asset</small><strong id="asset-balance">—</strong><span id="asset-symbol">No route configured</span></article>
-        <article><small>Largest drift</small><strong id="drift">—</strong><span>Compared with your target</span></article>
+        <article><small>AUSD in your bag</small><strong id="ausd-balance">—</strong><span>Real wallet balance</span></article>
+        <article><small>Tradeable demo coin</small><strong id="asset-balance">—</strong><span id="asset-symbol">No route configured</span></article>
+        <article><small>Out of balance</small><strong id="drift">—</strong><span>Distance from your target</span></article>
       </section>
 
       <section class="faucet-bar" aria-label="Test token faucets">
-        <div><strong>Empty test wallet?</strong><span>Request Agora test tokens directly. You still need a little Sepolia ETH for gas.</span></div>
+        <div><strong>Need demo coins?</strong><span>Grab test AUSD or CTK. You’ll still need a little Sepolia ETH for gas.</span></div>
         <div class="faucet-actions"><button id="faucet-ausd">Get test AUSD</button><button id="faucet-ctk">Get test CTK</button></div>
       </section>
 
       <section class="grid">
         <section class="panel">
-          <div class="section-head"><div><p class="eyebrow">PROTECTED MANDATE</p><h2>Rebalancing controls</h2></div><button id="refresh">Refresh balances</button></div>
-          <p class="hint">AUSD and one route-configured asset are the only allowed execution assets. Imported portfolio data is not used for execution.</p>
+          <div class="section-head"><div><p class="eyebrow">BAG GUARDRAILS</p><h2>Set your hard limits</h2></div><button id="refresh">Refresh bag</button></div>
+          <p class="hint">Only AUSD and the verified demo coin can move. Your strategy ideas never become trades on their own.</p>
           <div class="controls">
             <label>AUSD target <span><input id="target" type="number" min="0" max="100" step="0.1" value="20">%</span></label>
             <label>Drift threshold <span><input id="threshold" type="number" min="0" max="100" step="0.1" value="2"> pp</span></label>
@@ -46,15 +69,15 @@
         </section>
 
         <section class="panel proposal-panel">
-          <div class="section-head"><div><p class="eyebrow">EXECUTION PLAN</p><h2>On-chain rebalancing</h2></div><span id="plan-badge">AWAITING BALANCES</span></div>
-          <div id="proposal"><p class="hint">Connect an Ethereum Sepolia wallet, then refresh real balances to build a plan.</p></div>
-          <div class="actions"><button id="plan" class="secondary">Build plan</button><button id="execute" class="primary" disabled>Rebalance</button></div>
+          <div class="section-head"><div><p class="eyebrow">NEXT MOVE</p><h2>Review before anything moves</h2></div><span id="plan-badge">WAITING FOR BAG</span></div>
+          <div id="proposal"><p class="hint">Connect your Sepolia wallet, refresh the bag, then preview the move.</p></div>
+          <div class="actions"><button id="plan" class="secondary">Preview move</button><button id="execute" class="primary" disabled>Balance bag</button></div>
           <p id="status" role="status">No transaction has been requested.</p>
         </section>
       </section>
 
-      <section class="panel activity-panel"><div class="section-head"><h2>Transaction activity</h2><button id="clear">Clear</button></div><div id="activity"><p class="hint">Confirmed wallet transactions will appear here with Ethereum Sepolia links.</p></div></section>
-      <p class="footer-note">Canonical Ethereum Sepolia test pair: AUSD <code>0xa901…22dC</code> / CTK <code>0x7BEb…cd9D</code>. You also need Sepolia ETH for gas. <a href="https://docs.agora.finance/instant-settlement/guides/getting-testnet-tokens" target="_blank" rel="noreferrer">Agora test-token guide ↗</a></p>
+      <section class="panel activity-panel"><div class="section-head"><h2>Bag history</h2><button id="clear">Clear</button></div><div id="activity"><p class="hint">Confirmed wallet moves will appear here with Sepolia links.</p></div></section>
+      <p class="footer-note"><strong>BagBalencer is a testnet demo.</strong> Strategy outputs are educational, not financial advice. Real demo moves require your wallet approval. <a href="https://docs.agora.finance/instant-settlement/guides/getting-testnet-tokens" target="_blank" rel="noreferrer">Get test tokens ↗</a></p>
     </main>
   </div>
   <script type="module" src="/src/agent.js"></script>

@@ -1,12 +1,17 @@
 import { BrowserProvider } from 'ethers';
 import { executeRebalance, mandate, quoteRebalance, readPortfolio, requestTestFunds, routeConfig } from './rebalance.js';
+import { buildHermesStrategy, COIN_LIBRARY } from './advisor.js';
 import './agent.css';
+import './advisor.css';
+import './bagbalancer.css';
 
 const $ = (id) => document.getElementById(id);
 const route = routeConfig(import.meta.env);
 let account = null;
 let currentQuote = null;
 let busy = false;
+let advisorStrategy = null;
+const selectedAdvisorCoins = new Set(['BTC','ETH']);
 
 const number = (value, decimals = 2) => Number(value).toLocaleString(undefined, { maximumFractionDigits: decimals });
 const short = (value) => `${value.slice(0, 6)}…${value.slice(-4)}`;
@@ -24,6 +29,46 @@ function activity(message, hash) {
   if (hash) { const link = document.createElement('a'); link.href = `${route.explorerUrl}/tx/${hash}`; link.target = '_blank'; link.rel = 'noreferrer'; link.textContent = `View ${route.networkName} ↗`; row.append(link); }
   if ($('activity').querySelector('.hint')) $('activity').replaceChildren();
   $('activity').prepend(row);
+}
+function advisorInput() {
+  return {
+    goal:$('advisor-goal').value,
+    horizonMonths:Number($('advisor-horizon').value),
+    maxDrawdown:Number($('advisor-drawdown').value),
+    priority:$('advisor-priority').value,
+    regime:$('advisor-regime').value,
+    frequency:$('advisor-frequency').value,
+    minimumAusd:Number($('advisor-reserve').value),
+    maximumAssetWeight:Number($('advisor-max-weight').value),
+    speculativeLimit:Number($('advisor-speculative-limit').value),
+    maximumSpending:Number($('advisor-max-spend').value),
+    allowSpeculative:$('advisor-speculative').checked,
+    approvalRequired:$('advisor-approval').checked,
+    coins:[...selectedAdvisorCoins]
+  };
+}
+function showCoinLibrary(query='') {
+  const normalized=query.trim().toLowerCase();
+  const library=$('advisor-coins'); library.replaceChildren();
+  for(const coin of COIN_LIBRARY.filter(coin=>coin.symbol!=='AUSD'&&(!normalized||coin.symbol.toLowerCase().includes(normalized)||coin.name.toLowerCase().includes(normalized)))) {
+    const label=document.createElement('label'); const input=document.createElement('input'); input.type='checkbox'; input.name='advisor-coin'; input.value=coin.symbol; input.checked=selectedAdvisorCoins.has(coin.symbol); input.onchange=()=>input.checked?selectedAdvisorCoins.add(coin.symbol):selectedAdvisorCoins.delete(coin.symbol); const text=document.createElement('span'); text.textContent=`${coin.symbol} · ${coin.name}`; label.append(input,text); library.append(label);
+  }
+}
+function renderAdvisor(strategy) {
+  const output=$('advisor-output'); output.replaceChildren();
+  const summary=document.createElement('div'); summary.className='strategy-summary';
+  for(const [label,value] of [['Risk score',`${strategy.mandate.riskScore}/100`],['AUSD target',`${strategy.allocation[0].weight.toFixed(1)}%`],['Research confidence',`${strategy.research.confidence}/100`]]) { const chip=document.createElement('div'); chip.className='strategy-chip'; const small=document.createElement('small'); small.textContent=label; const strong=document.createElement('strong'); strong.textContent=value; chip.append(small,strong); summary.append(chip); }
+  output.append(summary);
+  for(const asset of strategy.allocation) { const row=document.createElement('div'); row.className='allocation-row'; const symbol=document.createElement('span'); symbol.textContent=asset.symbol; const track=document.createElement('div'); track.className='allocation-track'; const fill=document.createElement('div'); fill.className='allocation-fill'; fill.style.width=`${asset.weight}%`; fill.title=asset.role; track.append(fill); const weight=document.createElement('strong'); weight.textContent=`${asset.weight.toFixed(1)}%`; row.append(symbol,track,weight); output.append(row); }
+  const details=document.createElement('div'); details.className='strategy-details';
+  const why=document.createElement('article'); const whyTitle=document.createElement('h3'); whyTitle.textContent='WHY THIS MIX'; const list=document.createElement('ul'); for(const reason of strategy.reasoning){const item=document.createElement('li');item.textContent=reason;list.append(item);} why.append(whyTitle,list);
+  const stress=document.createElement('article'); const stressTitle=document.createElement('h3'); stressTitle.textContent='ILLUSTRATIVE SCENARIOS'; stress.append(stressTitle); for(const scenario of strategy.scenarioResults){const row=document.createElement('div');row.className='scenario';const name=document.createElement('span');name.textContent=scenario.label;const change=document.createElement('strong');change.className=scenario.changePercent<0?'negative':'positive';change.textContent=`${scenario.changePercent>0?'+':''}${scenario.changePercent.toFixed(1)}%`;row.append(name,change);stress.append(row);} details.append(why,stress); output.append(details);
+  const warning=document.createElement('p'); warning.className='research-warning'; warning.textContent=`${strategy.research.source}. Scenarios are what-ifs, not forecasts. Nothing moved.`; output.append(warning);
+  const apply=document.createElement('button'); apply.type='button'; apply.className='secondary apply-strategy'; apply.textContent='Use these guardrails →'; apply.onclick=()=>{ $('target').value=strategy.allocation[0].weight; $('threshold').value=strategy.controls.driftThreshold; $('cap').value=strategy.controls.maximumSpendingAusd; currentQuote=null; $('execute').disabled=true; $('plan-badge').textContent='BAG RULES APPLIED'; status('Bag guardrails applied. The demo can still move only AUSD/CTK after a fresh quote and your wallet approval.'); }; output.append(apply);
+}
+function generateStrategy() {
+  advisorStrategy=buildHermesStrategy(advisorInput());
+  renderAdvisor(advisorStrategy);
 }
 async function baseProvider() {
   if (!route.ready) throw new Error(route.reason);
@@ -48,9 +93,9 @@ async function connect() {
   status('Wallet connected. Refresh balances to build a real onchain plan.');
 }
 function showRoute() {
-  $('route-state').textContent = route.ready ? 'Verified-config route loaded' : 'Execution blocked';
+  $('route-state').textContent = route.ready ? 'Verified route ready ✓' : 'Moves are paused';
   $('route-state').className = route.ready ? 'ready' : 'blocked';
-  $('route-detail').textContent = route.ready ? `${route.networkName} pair ${short(route.router)} · AUSD/CTK · ${route.quoteTtl}s quote TTL` : route.reason;
+  $('route-detail').textContent = route.ready ? `${route.networkName} · AUSD/CTK · quotes stay fresh for ${route.quoteTtl}s` : route.reason;
 }
 function showPortfolio(portfolio) {
   $('ausd-balance').textContent = `${number(portfolio.ausd, 6)} AUSD`;
@@ -125,10 +170,13 @@ $('faucet-ctk').onclick = () => guarded(() => claim('CTK'));
 $('plan').onclick = () => guarded(buildPlan);
 $('execute').onclick = () => guarded(execute);
 $('clear').onclick = () => $('activity').replaceChildren();
+$('advisor-form').onsubmit = event => { event.preventDefault(); try { generateStrategy(); } catch(error) { status(error.message,true); } };
+$('advisor-coin-search').oninput = event => showCoinLibrary(event.target.value);
 for (const id of ['target','threshold','reserve','cap','slippage']) $(id).onchange = () => { currentQuote = null; $('execute').disabled = true; $('plan-badge').textContent = 'MANDATE CHANGED'; status('Mandate changed. Build a new quote before rebalancing.'); };
 if (window.ethereum?.on) {
   window.ethereum.on('accountsChanged', (accounts) => { account = accounts[0] || null; currentQuote = null; $('connect').textContent = account ? `Wallet ${short(account)} ↗` : 'Connect wallet ↗'; $('execute').disabled = true; status(account ? 'Wallet changed. Refresh balances.' : 'Wallet disconnected.'); });
   window.ethereum.on('chainChanged', () => { currentQuote = null; $('execute').disabled = true; status(`Network changed. Reconnect on ${route.networkName}.`); });
 }
 showRoute();
+showCoinLibrary();
 if (!route.ready) { $('execute').disabled = true; status(route.reason, true); }

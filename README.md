@@ -73,6 +73,44 @@ npm run build
 
 ## Proposal-only Hermes HTTP API
 
+### Goal-based strategy
+
+`POST /api/hermes/strategy` turns conversational investor preferences into a proposal-only, multi-coin allocation. The same deterministic engine powers the Strategy Lab on the main page. It combines goal, loss tolerance, time horizon, and speculative preference into a risk score, then applies:
+
+- a minimum and model-derived AUSD reserve
+- confidence, liquidity, maturity, volatility, and correlation adjustments
+- maximum per-coin and aggregate speculative caps
+- wider no-trade bands during volatile or risk-off regimes
+- illustrative crash, sideways, and rally sensitivity tests
+- mandatory disclosure that the bundled research metadata is curated demo input, not live research
+
+The curated demo library contains 50 profiles: AUSD plus 49 searchable crypto assets across store-of-value, smart-contract, payments, DeFi, infrastructure, data, compute, gaming, identity, interoperability, and meme categories. It is a supported universe, not a claim that these are the current top 50 by market capitalization. Recommendations do not make those assets executable: the wallet adapter remains limited to the separately verified AUSD/CTK Ethereum Sepolia route.
+
+```sh
+curl -X POST http://127.0.0.1:5173/api/hermes/strategy \
+  -H "Authorization: Bearer $PROPOSAL_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "goal":"balanced",
+    "horizonMonths":36,
+    "maxDrawdown":15,
+    "minimumAusd":20,
+    "maximumAssetWeight":35,
+    "speculativeLimit":10,
+    "maximumSpending":500,
+    "allowSpeculative":false,
+    "approvalRequired":true,
+    "priority":"diversification",
+    "regime":"normal",
+    "frequency":"monthly",
+    "coins":["BTC","ETH"]
+  }'
+```
+
+The response includes the derived mandate, allocation, explanations, scenario sensitivities, research confidence, and execution controls. `mode` is always `proposal_only` and `paymentsExecuted` is always `false`.
+
+### Holdings-to-target rebalance
+
 `POST /api/hermes/proposals` accepts holdings, target allocations, a drift threshold, and a maximum gross AUSD buy amount. It returns a deterministic proposal and reasoning only. It never calls the x402/payment routes or submits wallet transactions.
 
 Set `PROPOSAL_API_TOKEN` in ignored `.env`, restart the server, and authenticate with `Authorization: Bearer <token>`.

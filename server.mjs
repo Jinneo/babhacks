@@ -5,6 +5,7 @@ import {createServer as createViteServer} from 'vite';
 import {JsonRpcProvider,Wallet,Contract,parseUnits,Signature,verifyTypedData,TypedDataEncoder} from 'ethers';
 import {TOKEN,CHAIN,ABI,types} from './src/payment.js';
 import {planRebalance} from './src/portfolio.js';
+import {buildHermesStrategy} from './src/advisor.js';
 if(existsSync('.env')) for(const line of readFileSync('.env','utf8').split('\n')) {const m=line.match(/^([A-Z_]+)=(.*)$/);if(m&&!process.env[m[1]])process.env[m[1]]=m[2].trim();}
 const PORT=Number(process.env.PORT||5173);
 if(!Number.isInteger(PORT)||PORT<1024||PORT>65535)throw new Error('PORT must be an integer from 1024 to 65535.');
@@ -37,6 +38,13 @@ const server=http.createServer(async(req,res)=>{
   try {
     const path=new URL(req.url,'http://localhost:5173').pathname;
     if(path==='/api/config'&&req.method==='GET')return send(res,200,{liveReady:!!wallet,broker:wallet?.address,network:CHAIN});
+    if(path==='/api/hermes/strategy'){
+      if(req.method!=='POST')return send(res,405,{error:'POST required.'});
+      if(!proposalToken)return send(res,503,{error:'Set PROPOSAL_API_TOKEN in .env and restart the server.'});
+      if(!bearerAuthorized(req))return send(res,401,{error:'Bearer authentication required.'},{'WWW-Authenticate':'Bearer'});
+      const strategy=buildHermesStrategy(await body(req));
+      return send(res,200,{proposalId:randomBytes(12).toString('hex'),agent:'hermes-strategy-planner',...strategy});
+    }
     if(path==='/api/hermes/proposals'){
       if(req.method!=='POST')return send(res,405,{error:'POST required.'});
       if(!proposalToken)return send(res,503,{error:'Set PROPOSAL_API_TOKEN in .env and restart the server.'});

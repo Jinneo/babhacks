@@ -1,5 +1,6 @@
 import { BrowserProvider, Contract, formatUnits, parseUnits, isAddress, ZeroAddress } from 'ethers';
 import './style.css';
+import './bagbalancer-transfer.css';
 const CHAIN = 84532;
 const TOKEN = '0xa9012a055bd4e0edff8ce09f960291c09d5322dc';
 const FAUCET = '0xd236c18d274e54faccc3dd9dda4b27965a73ee6c';
