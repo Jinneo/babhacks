@@ -1,0 +1,21 @@
+## Best Use of AUSD ($1,500)
+
+Agora issues **AUSD**, a fully reserved, institutional-grade digital dollar live on 10+ chains. As AI agents start buying, selling, and paying for things on their own, they need a dollar that moves as easily as an API call. That's AUSD.
+
+This track goes to the best project built around **AUSD**, with a focus on **agentic payments** and **x402**. x402 is the open protocol that revives HTTP's `402 Payment Required` so any API, website, or agent can charge and pay per request in stablecoins. AUSD supports **ERC-3009 gasless transfers**, the primitive x402 payments are built on, so your agents can pay without holding gas.
+
+The best projects will showcase AUSD use cases or flows in a creative and practical way that can be used in the real world.
+
+**To set up, follow these instructions:**
+
+1. Grab a wallet and testnet gas. We recommend **Base Sepolia**.
+2. Mint free testnet AUSD from the faucet (10,000 AUSD per request).
+3. Connect the **Agora Docs MCP** to your coding agent: `claude mcp add --transport http agora https://docs.agora.finance/_mcp/server` (or add it in Cursor).
+4. Build!
+5. Questions? Find the Agora team table.
+
+**First Place: $1,000**
+
+**Runner-Up: $500**
+
+
