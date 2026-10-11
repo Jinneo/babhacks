@@ -70,9 +70,9 @@ const SCENARIOS = {
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 const round = (value, places = 1) => Number(value.toFixed(places));
 
-function scenarioReturn(kind, symbol, scenario) {
+function scenarioReturn(kind, symbol, scenario, researchedAssets = new Map()) {
   if (scenario.returns[symbol] != null) return scenario.returns[symbol];
-  const asset=COIN_LIBRARY.find(item=>item.symbol===symbol);
+  const asset=researchedAssets.get(symbol) || COIN_LIBRARY.find(item=>item.symbol===symbol);
   if (!asset || symbol==='AUSD') return 0;
   if (kind==='crash') return -clamp(asset.risk*.75,30,80);
   if (kind==='sideways') return clamp((65-asset.risk)/8,-6,3);
@@ -146,13 +146,21 @@ function distributeWithCaps(items, total, cap) {
   return {weights, remainder:remaining};
 }
 
-export function buildHermesStrategy(input = {}) {
+export function buildStrategy(input = {}) {
   const mandate = deriveInvestorMandate(input);
+  const researchAssets = new Map((input.researchSnapshot?.assets || []).map(asset => [String(asset.symbol).toUpperCase(),asset]));
   const selectedSymbols = [...new Set((input.coins || ['BTC','ETH']).map(value => String(value).toUpperCase()))]
     .filter(symbol => symbol !== 'AUSD' && COIN_LIBRARY.some(asset => asset.symbol === symbol));
   if (!selectedSymbols.length) throw new Error('Select at least one non-AUSD coin.');
-  const eligible = COIN_LIBRARY.filter(asset => selectedSymbols.includes(asset.symbol) && (mandate.speculativeLimit > 0 || !asset.speculative));
+  const eligible = COIN_LIBRARY.filter(asset => selectedSymbols.includes(asset.symbol) && (mandate.speculativeLimit > 0 || !asset.speculative)).map(asset=>{
+    const live=researchAssets.get(asset.symbol);
+    if(!live)return asset;
+    const metrics=Object.fromEntries(['risk','volatility','liquidity','confidence','upside'].map(key=>[key,Number(live[key])]));
+    if(Object.values(metrics).some(value=>!Number.isFinite(value)||value<0||value>100))throw new Error(`Live research returned invalid metrics for ${asset.symbol}.`);
+    return {...asset,...metrics};
+  });
   if (!eligible.length) throw new Error('The selected coins are outside the speculative policy.');
+  const groupSizes=eligible.reduce((sizes,asset)=>sizes.set(asset.group,(sizes.get(asset.group)||0)+1),new Map());
   const scored = eligible.map(asset => {
     const fit = Math.max(4, 100 - Math.abs(asset.risk - mandate.riskScore) * 1.3);
     const quality = (asset.liquidity + asset.maturity + asset.confidence) / 3;
@@ -160,11 +168,15 @@ export function buildHermesStrategy(input = {}) {
     let score = fit * .45 + quality * .35 + diversification * .2;
     if (mandate.priority === 'low_volatility') score *= (115 - asset.volatility) / 70;
     if (mandate.priority === 'upside') score *= (.65 + asset.upside / 100);
-    if (mandate.priority === 'diversification') score *= asset.group === 'store-of-value' ? 1.08 : 1;
+    if (mandate.priority === 'diversification') score /= Math.sqrt(groupSizes.get(asset.group));
     return {...asset, score:Math.max(1, score)};
   });
   const riskyTotal = 100 - mandate.ausdTarget;
-  const capped = distributeWithCaps(scored, riskyTotal, mandate.maximumAssetWeight);
+  const breadth=Math.min(scored.length,8);
+  const coreCount=scored.filter(asset=>!asset.speculative).length;
+  const requiredCoreCapacity=coreCount?Math.max(0,riskyTotal-Math.min(riskyTotal,mandate.speculativeLimit))/coreCount:0;
+  const effectiveAssetCap=mandate.priority==='diversification'&&breadth>=4?Math.min(mandate.maximumAssetWeight,Math.max(8,round(riskyTotal/breadth*1.35),requiredCoreCapacity)):mandate.maximumAssetWeight;
+  const capped = distributeWithCaps(scored, riskyTotal, effectiveAssetCap);
   let weights = capped.weights;
   const speculative = scored.filter(asset => asset.speculative);
   const speculativeWeight = speculative.reduce((sum, asset) => sum + weights[asset.symbol], 0);
@@ -177,13 +189,13 @@ export function buildHermesStrategy(input = {}) {
       weights[asset.symbol] *= scale;
       reclaimed += before - weights[asset.symbol];
     }
-    let active = scored.filter(asset => !asset.speculative && weights[asset.symbol] < mandate.maximumAssetWeight);
+    let active = scored.filter(asset => !asset.speculative && weights[asset.symbol] < effectiveAssetCap);
     while (reclaimed > .0001 && active.length) {
       const scoreTotal = active.reduce((sum, asset) => sum + asset.score, 0);
       let assigned = 0;
       const next = [];
       for (const asset of active) {
-        const room = mandate.maximumAssetWeight - weights[asset.symbol];
+        const room = effectiveAssetCap - weights[asset.symbol];
         const amount = Math.min(room, reclaimed * asset.score / scoreTotal);
         weights[asset.symbol] += amount;
         assigned += amount;
@@ -201,24 +213,25 @@ export function buildHermesStrategy(input = {}) {
   ].filter(row => row.weight > 0);
   const difference = round(100 - allocation.reduce((sum, row) => sum + row.weight, 0));
   allocation[0].weight = round(allocation[0].weight + difference);
+  const researchedAssets=new Map(scored.map(asset=>[asset.symbol,asset]));
   const scenarioResults = Object.entries(SCENARIOS).map(([kind,scenario]) => ({
     label:scenario.label,
-    changePercent:round(allocation.reduce((sum, row) => sum + row.weight / 100 * scenarioReturn(kind,row.symbol,scenario), 0))
+    changePercent:round(allocation.reduce((sum, row) => sum + row.weight / 100 * scenarioReturn(kind,row.symbol,scenario,researchedAssets), 0))
   }));
   const averageConfidence = round(scored.reduce((sum, asset) => sum + asset.confidence, 0) / scored.length);
   const maxWeight = Math.max(...allocation.map(row => row.weight));
   return {
     mode:'proposal_only', mandate, allocation, scenarioResults,
-    diagnostics:{averageResearchConfidence:averageConfidence,largestPositionWeight:maxWeight,selectedCoins:selectedSymbols,eligibleCoins:eligible.map(asset=>asset.symbol)},
+    diagnostics:{averageResearchConfidence:averageConfidence,largestPositionWeight:maxWeight,effectiveAssetCap,selectedCoins:selectedSymbols,eligibleCoins:eligible.map(asset=>asset.symbol)},
     reasoning:[
       `Risk score ${mandate.riskScore}/100 combines goal, loss tolerance, time horizon, and speculative preference.`,
       `${allocation[0].weight.toFixed(1)}% stays in AUSD after the user floor, risk model, market regime, and any binding caps.`,
-      `Risk assets are confidence-weighted, penalized for correlation, and capped at ${mandate.maximumAssetWeight.toFixed(1)}% each.`,
+      `Risk assets are spread across categories, penalized for correlation, and capped at ${effectiveAssetCap.toFixed(1)}% each.`,
       `Speculative assets are capped at ${mandate.speculativeLimit.toFixed(1)}% in total.`,
       `Rebalance only beyond ${mandate.driftThreshold.toFixed(1)} percentage points, with a ${mandate.maximumSpending.toFixed(2)} AUSD per-run limit.`
     ],
     controls:{approvalRequired:mandate.approvalRequired,frequency:mandate.frequency,maximumSpendingAusd:mandate.maximumSpending,driftThreshold:mandate.driftThreshold},
-    research:{source:'Curated demo assumptions—not live market research',confidence:averageConfidence,live:false},
+    research:input.researchSnapshot ? {source:'Live market research',confidence:averageConfidence,live:true,asOf:input.researchSnapshot.asOf,summary:input.researchSnapshot.summary,citations:input.researchSnapshot.citations || [],warnings:input.researchSnapshot.warnings || []} : {source:'Curated demo assumptions—not live market research',confidence:averageConfidence,live:false,citations:[]},
     paymentsExecuted:false
   };
 }

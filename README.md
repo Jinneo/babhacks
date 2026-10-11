@@ -43,7 +43,7 @@ The only execution flow is direct, wallet-confirmed on-chain calls:
 3. Re-quote and request `swapExactTokensForTokens` on that pair.
 4. Wait for a successful Ethereum Sepolia receipt, then re-read balances.
 
-No relayer, simulated security trade, fake credit, background transfer, or server-side private key is used.
+No relayer, simulated security trade, fake credit, background transfer, or server-side private key is used for portfolio swaps. The optional x402 research-payment service uses a separate Base Sepolia relayer that cannot execute portfolio trades.
 
 ## Route configuration
 
@@ -73,23 +73,50 @@ npm test
 npm run build
 ```
 
-## Proposal-only Hermes HTTP API
+## Proposal-only research API
 
-### Goal-based strategy
+### Live-researched goal-based strategy
 
-`POST /api/hermes/strategy` turns conversational investor preferences into a proposal-only, multi-coin allocation. The same deterministic engine powers the Strategy Lab on the main page. It combines goal, loss tolerance, time horizon, and speculative preference into a risk score, then applies:
+The Strategy Lab runs fresh web research for every submission. The local research agent receives the questionnaire answers and selected coins, assesses current market conditions and every selected asset, and returns timestamped scores, a market-regime assessment, explanations, and source links. Those validated research inputs feed the allocation engine; no research response can directly execute a payment or wallet transaction.
+
+The research CLI must be installed, authenticated, and able to use its web tools. Set `RESEARCH_AGENT_BIN` in the ignored `.env` file:
+
+```dotenv
+RESEARCH_AGENT_BIN=/absolute/path/to/local-research-agent
+```
+
+Open the local UI and submit the Strategy Lab form. The browser calls `POST /api/research-strategy`, which is intentionally available only through this localhost app. A run commonly takes around a minute. The server accepts only complete HTTPS-cited research produced within the last 24 hours; malformed, incomplete, stale, concurrent, or timed-out runs fail closed and do not generate a strategy.
+
+The response remains proposal-only: `mode` is `proposal_only`, `paymentsExecuted` is `false`, and the user must separately choose whether to apply the suggested portfolio. Applying a proposal updates the on-page allocation chart but cannot move assets—the wallet flow still requires a fresh verified AUSD/CTK quote and explicit wallet approval.
+
+### Optional x402 research payment
+
+When x402 settlement is configured, the existing **Research + balance my bag** action first requests a payment quote capped at `0.10` test AUSD on Base Sepolia. The wallet briefly switches networks, signs an EIP-3009 authorization, the local relayer settles it, and the wallet returns to its previous network before the normal research flow continues. A small explorer-linked receipt appears with the proposal. Portfolio rebalancing remains a separate Ethereum Sepolia action requiring its own wallet approval.
+
+Set these only in ignored `.env`:
+
+```dotenv
+BASE_SEPOLIA_RPC=https://sepolia.base.org
+RELAYER_PRIVATE_KEY=0x...
+```
+
+The relayer needs Base Sepolia ETH for gas. The paying wallet needs at least `0.10` Base Sepolia test AUSD. If the relayer is not configured, research continues exactly as before and the UI labels the feature `x402-ready` without claiming that a payment occurred.
+
+### Deterministic strategy API
+
+`POST /api/strategy` turns conversational investor preferences into a proposal-only, multi-coin allocation. The same deterministic engine powers the Strategy Lab on the main page. It combines goal, loss tolerance, time horizon, and speculative preference into a risk score, then applies:
 
 - a minimum and model-derived AUSD reserve
 - confidence, liquidity, maturity, volatility, and correlation adjustments
 - maximum per-coin and aggregate speculative caps
 - wider no-trade bands during volatile or risk-off regimes
 - illustrative crash, sideways, and rally sensitivity tests
-- mandatory disclosure that the bundled research metadata is curated demo input, not live research
+- mandatory disclosure that this API route uses bundled research metadata rather than live research
 
-The curated demo library contains 50 profiles: AUSD plus 49 searchable crypto assets across store-of-value, smart-contract, payments, DeFi, infrastructure, data, compute, gaming, identity, interoperability, and meme categories. It is a supported universe, not a claim that these are the current top 50 by market capitalization. Recommendations do not make those assets executable: the wallet adapter remains limited to the separately verified AUSD/CTK Ethereum Sepolia route.
+The shared library contains 50 profiles: AUSD plus 49 searchable crypto assets across store-of-value, smart-contract, payments, DeFi, infrastructure, data, compute, gaming, identity, interoperability, and meme categories. It is a supported universe, not a claim that these are the current top 50 by market capitalization. The live Strategy Lab overlays fresh market research on these profiles; this deterministic API uses the curated values. Recommendations do not make those assets executable: the wallet adapter remains limited to the separately verified AUSD/CTK Ethereum Sepolia route.
 
 ```sh
-curl -X POST http://127.0.0.1:5173/api/hermes/strategy \
+curl -X POST http://127.0.0.1:5173/api/strategy \
   -H "Authorization: Bearer $PROPOSAL_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -97,7 +124,7 @@ curl -X POST http://127.0.0.1:5173/api/hermes/strategy \
     "horizonMonths":36,
     "maxDrawdown":15,
     "minimumAusd":20,
-    "maximumAssetWeight":35,
+    "maximumAssetWeight":20,
     "speculativeLimit":10,
     "maximumSpending":500,
     "allowSpeculative":false,
@@ -113,12 +140,12 @@ The response includes the derived mandate, allocation, explanations, scenario se
 
 ### Holdings-to-target rebalance
 
-`POST /api/hermes/proposals` accepts holdings, target allocations, a drift threshold, and a maximum gross AUSD buy amount. It returns a deterministic proposal and reasoning only. It never calls the x402/payment routes or submits wallet transactions.
+`POST /api/proposals` accepts holdings, target allocations, a drift threshold, and a maximum gross AUSD buy amount. It returns a deterministic proposal and reasoning only. It never calls the x402/payment routes or submits wallet transactions.
 
 Set `PROPOSAL_API_TOKEN` in ignored `.env`, restart the server, and authenticate with `Authorization: Bearer <token>`.
 
 ```sh
-curl -X POST http://127.0.0.1:5173/api/hermes/proposals \
+curl -X POST http://127.0.0.1:5173/api/proposals \
   -H "Authorization: Bearer $PROPOSAL_API_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

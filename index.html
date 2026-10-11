@@ -29,24 +29,28 @@
             <label>Time horizon<select id="advisor-horizon"><option value="3">Under 1 year</option><option value="12">1–3 years</option><option value="36" selected>3–5 years</option><option value="60">5+ years</option></select></label>
             <label>Comfortable drawdown<select id="advisor-drawdown"><option value="5">About 5%</option><option value="15" selected>About 15%</option><option value="30">About 30%</option><option value="50">50% or more</option></select></label>
             <label>Priority<select id="advisor-priority"><option value="low_volatility">Lower volatility</option><option value="diversification" selected>Diversification</option><option value="upside">Potential upside</option></select></label>
-            <label>Market assumption<select id="advisor-regime"><option value="normal" selected>Normal conditions</option><option value="volatile">High volatility</option><option value="risk_off">Risk-off / stressed</option></select></label>
+            <label>Market assumption<select id="advisor-regime"><option value="auto" selected>Real data</option><option value="normal">Normal conditions</option><option value="volatile">High volatility</option><option value="risk_off">Risk-off / stressed</option></select></label>
             <label>Review cadence<select id="advisor-frequency"><option value="weekly">Weekly</option><option value="monthly" selected>Monthly</option><option value="quarterly">Quarterly</option></select></label>
             <label>Minimum AUSD reserve<span><input id="advisor-reserve" type="number" min="0" max="95" value="20">%</span></label>
-            <label>Maximum per coin<span><input id="advisor-max-weight" type="number" min="5" max="80" value="35">%</span></label>
+            <label>Maximum per coin<span><input id="advisor-max-weight" type="number" min="5" max="80" value="20">%</span></label>
             <label>Speculative cap<span><input id="advisor-speculative-limit" type="number" min="0" max="60" value="10">%</span></label>
             <label>Maximum per rebalance<span><input id="advisor-max-spend" type="number" min="0" value="500"> AUSD</span></label>
-            <fieldset class="coin-fieldset"><legend>Allowed coin library · 50 profiles</legend><label class="coin-search">Find a coin <input id="advisor-coin-search" type="search" placeholder="Symbol or name"></label><div id="advisor-coins" class="coin-library"></div></fieldset>
+            <fieldset class="coin-fieldset"><legend>Allowed coin library · 50 profiles</legend><label class="coin-search">Find a coin <input id="advisor-coin-search" type="search" placeholder="Symbol or name"></label><p id="coin-diversity-hint" class="coin-diversity-hint"></p><div id="advisor-coins" class="coin-library"></div></fieldset>
             <div class="policy-checks"><label><input id="advisor-speculative" type="checkbox"> Allow speculative assets</label><label><input id="advisor-approval" type="checkbox" checked> Require approval for every trade</label></div>
-            <button id="generate-strategy" class="primary" type="submit">Balance my bag →</button>
+            <div class="research-action"><button id="generate-strategy" class="primary" type="submit">Research + balance my bag →</button><span id="x402-indicator" class="x402-indicator">x402 · checking testnet</span></div>
           </form>
           <div id="advisor-output" class="advisor-output"><p class="empty-state">Your bag mix will show up here.<br><span>No trades. No surprises.</span></p></div>
         </div>
       </section>
 
-      <section class="stats" aria-label="Wallet balances">
-        <article><small>AUSD in your bag</small><strong id="ausd-balance">—</strong><span>Real wallet balance</span></article>
-        <article><small>Tradeable demo coin</small><strong id="asset-balance">—</strong><span id="asset-symbol">No route configured</span></article>
-        <article><small>Out of balance</small><strong id="drift">—</strong><span>Distance from your target</span></article>
+      <section class="wallet-section" aria-labelledby="wallet-balances-title">
+        <div class="wallet-section-head"><div><p class="eyebrow">CONNECTED WALLET</p><h2 id="wallet-balances-title">Your live balances</h2></div><button id="refresh" class="secondary">Refresh your balance</button></div>
+        <p id="balance-status" class="balance-status" role="status">Connect your Sepolia wallet to load its onchain balances.</p>
+        <div class="stats">
+          <article><small>AUSD in your bag</small><strong id="ausd-balance">—</strong><span>Real wallet balance</span></article>
+          <article><small>Tradeable demo coin</small><strong id="asset-balance">—</strong><span id="asset-symbol">No route configured</span></article>
+          <article><small>Out of balance</small><strong id="drift">—</strong><span>Distance from your target</span></article>
+        </div>
       </section>
 
       <section class="faucet-bar" aria-label="Test token faucets">
@@ -55,17 +59,13 @@
       </section>
 
       <section class="grid">
-        <section class="panel">
-          <div class="section-head"><div><p class="eyebrow">BAG GUARDRAILS</p><h2>Set your hard limits</h2></div><button id="refresh">Refresh bag</button></div>
-          <p class="hint">Only AUSD and the verified demo coin can move. Your strategy ideas never become trades on their own.</p>
-          <div class="controls">
-            <label>AUSD target <span><input id="target" type="number" min="0" max="100" step="0.1" value="20">%</span></label>
-            <label>Drift threshold <span><input id="threshold" type="number" min="0" max="100" step="0.1" value="2"> pp</span></label>
-            <label>Protected AUSD reserve <span><input id="reserve" type="number" min="0" step="0.01" value="100"> AUSD</span></label>
-            <label>Per-run AUSD cap <span><input id="cap" type="number" min="0.01" step="0.01" value="500"> AUSD</span></label>
-            <label>Maximum slippage <span><input id="slippage" type="number" min="0" max="10" step="0.01" value="1">%</span></label>
+        <section class="panel portfolio-chart-panel">
+          <div class="section-head"><div><p class="eyebrow">YOUR BAG</p><h2>Portfolio mix</h2></div><span id="chart-state" class="chart-state">NO PROPOSAL APPLIED</span></div>
+          <p class="hint">Apply a proposal to see every coin in your portfolio and its target share.</p>
+          <div class="portfolio-chart-layout">
+            <div id="portfolio-pie" class="portfolio-pie empty" role="img" aria-label="No portfolio proposal applied"><div class="pie-center"><strong id="portfolio-coin-count">0</strong><span>coins</span></div></div>
+            <div id="portfolio-legend" class="portfolio-legend"><p class="chart-empty">Your portfolio chart will appear here.</p></div>
           </div>
-          <p class="security-note">Quotes expire after 60 seconds. Rebalance never sends a transaction until the connected wallet confirms it. The first swap may request testnet allowlisting and an exact token approval.</p>
         </section>
 
         <section class="panel proposal-panel">
